@@ -166,6 +166,23 @@ const guard = (req, res, next) => {
   res.status(401).json({ error: 'Sign in required' });
 };
 
+app.get('/api/cron/digest', async (req, res) => {
+  try {
+    await init();
+    const CRON_SECRET = process.env.CRON_SECRET || '';
+    if (CRON_SECRET && req.query.secret !== CRON_SECRET) return res.status(401).json({ error: 'Invalid cron secret' });
+    const S = state.settings;
+    if (!S.digestEnabled) return res.json({ skipped: true, reason: 'digest disabled in settings' });
+    if (!(hasSMTP() || hasResend() || S.webhook)) return res.json({ skipped: true, reason: 'no email provider configured' });
+    if (!S.recipients.length && !S.webhook) return res.json({ skipped: true, reason: 'no recipients configured' });
+    const t = PS.todayISO(S.timezone);
+    if (state.lastDigest === t) return res.json({ skipped: true, reason: 'already sent today', date: t });
+    state.lastDigest = t; await save();
+    const r = await sendDigest(process.env.PUBLIC_URL || '');
+    res.json({ sent: r.sent, webhook: !!r.webhook, subject: r.subject });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/health', async (req, res) => {
   let dbOk = !USE_DB;
   try { await init(); dbOk = !!state; } catch (e) { dbOk = false; }
