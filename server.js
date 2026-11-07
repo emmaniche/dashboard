@@ -67,7 +67,7 @@ async function initDb() {
   } else {
     state = normalize(freshState());
     state.rev = 0;
-    await persist();
+    await persistDb();
   }
 }
 function init() {
